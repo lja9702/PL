@@ -5,6 +5,9 @@
 #pragma once
 #include <stack>
 #include <cstring>
+#include <cstdlib>
+#define UNDIF (-1000)
+#define SYNERROR 1
 using namespace std;
 // CPL2TOYPROJECTDlg 대화 상자
 class CPL2TOYPROJECTDlg : public CDialogEx
@@ -40,6 +43,7 @@ public:
 	CString infixNotat;
 
 	bool infixToPrefix = 0;
+	bool rightSyntax = 0;
 
 	afx_msg void OnBnClickedButton_ScreenClear();
 	afx_msg void OnBnClickedButton_ChangeNotation();
@@ -54,5 +58,5 @@ public:
 	afx_msg void OnEnChangeEdit_result();
 	afx_msg bool infixReverse();
 	afx_msg CString makePrefixNotation();
-	afx_msg bool CPL2TOYPROJECTDlg::checkSyntax();
+	afx_msg int CPL2TOYPROJECTDlg::checkSyntax(int st, int end, CStringA str);
 };

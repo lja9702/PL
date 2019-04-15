@@ -181,7 +181,7 @@ void CPL2TOYPROJECTDlg::OnBnClickedButton_ScreenClear()
 	printBox.SetSel(0, -1, TRUE);
 	printBox.Clear();
 
-	infixToPrefix = 0;
+	infixToPrefix = 0;	//infix를 prefix로 바꿨던 여부를 다시 0으로 초기화
 }
 
 void CPL2TOYPROJECTDlg::OnBnClickedButton_ChangeNotation()
@@ -190,15 +190,32 @@ void CPL2TOYPROJECTDlg::OnBnClickedButton_ChangeNotation()
 	notationBox.Clear();
 
 	writeBox.GetWindowText(infixNotat);
-	if (infixNotat.GetLength() == 0) {
+	CStringA inf = CStringA(infixNotat);
+
+	int st = 0, end = inf.GetLength() - 1;
+	while (st < end) {
+		if (inf[st] != ' ' && inf[end] != ' ') break;
+		if (inf[st] == ' ') st++;
+		if (inf[end] == ' ')	end--;
+	}
+	if (st >= end) {
 		MessageBox(_T("입력한 수식이 없습니다."), _T("Error"), MB_ICONERROR);
 		return;
 	}
-	if (!infixReverse()) {
+	rightSyntax = checkSyntax(st, end, inf);
+	if(rightSyntax < 0) {
+		MessageBox(_T("Undefined"), _T("Error"), MB_ICONERROR);
+		return;
+	}
+	else if (rightSyntax > 0) {
 		MessageBox(_T("입력한 수식에 문제가 있습니다."), _T("Error"), MB_ICONERROR);
 		return;
 	}
 
+	if (!infixReverse()) {
+		MessageBox(_T("입력한 수식에 문제가 있습니다."), _T("Error"), MB_ICONERROR);
+		return;
+	}
 	prefixNotat = makePrefixNotation();
 	infixToPrefix = 1;
 	notationBox.SetWindowText(prefixNotat);
@@ -385,9 +402,63 @@ CString CPL2TOYPROJECTDlg::makePrefixNotation()	//스택을 이용해서 prefix�
 	return CString(res.MakeReverse());
 }
 
-bool CPL2TOYPROJECTDlg::checkSyntax()
+int CPL2TOYPROJECTDlg::checkSyntax(int st, int end, CStringA str)
 {
-	stack<CStringA> S;
-	
-	return 0;
+	if (str[st] == '(' && str[end] == ')') {	//( <term> MINUS <term> )이거나 ( <term> IF <term> ) 찾기
+		int cur = st + 1;
+		while (cur < end) {
+			if (str[cur] >= 'A' && str[cur] <= 'Z') {
+				CStringA oper;
+				int operst = cur;
+				while (cur < end && str[cur] >= 'A' && str[cur] <= 'Z') {
+					oper += str[cur];
+					cur++;
+				}
+				int operfin = cur - 1;
+
+				if (!strcmp(oper, "MINUS") || !strcmp(oper, "IF")) {
+					int x1 = st + 1, x2 = operst - 1, y1 = operfin + 1, y2 = end - 1;
+					while (x1 < x2) {
+						if (str[x1] != ' ' && str[x2] != ' ')	break;
+						if (str[x1] == ' ')	x1++;
+						if (str[x2] == ' ') x2--;
+					}
+					if (x1 > x2)	return SYNERROR;
+					while (y1 < y2) {
+						if (str[y1] != ' ' && str[y2] != ' ')	break;
+						if (str[y1] == ' ')	y1++;
+						if (str[y2] == ' ') y2--;
+					}
+					if (y1 > y2)	return SYNERROR;
+					return checkSyntax(x1, x2, str) + checkSyntax(y1, y2, str);
+				}
+				else 
+					return UNDIF;
+			}
+			cur++;
+		}
+		return SYNERROR;
+	}
+	else if ((str[st] >= '0' && str[st] <= '9') || str[st] == '-') {
+		if (str[st] == '-' && str[st + 1] == '-')	return SYNERROR;
+		int cur = st;
+		while (cur <= end && ((str[cur] >= '0' && str[cur] <= '9') || str[cur] == '-'))
+			cur++;
+
+		while (cur <= end && str[cur] == ' ')	cur++;
+		if (cur <= end)	return SYNERROR;
+		
+		return 0;
+	}
+	else if (str[st] >= 'a' && str[st] <= 'z') {
+		int cur = st;
+		while (cur <= end && str[cur] >= 'a' && str[cur] <= 'z')
+			cur++;
+
+		while (cur <= end && str[cur] == ' ')	cur++;
+		if (cur < end)	return SYNERROR;
+		
+		return 0;
+	}
+	return SYNERROR;
 }
