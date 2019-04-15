@@ -60,7 +60,10 @@ void CPL2TOYPROJECTDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
 	DDX_Control(pDX, IDC_EDIT1, writeBox);
+	DDX_Text(pDX, IDC_EDIT1, infixNotat);
 	DDX_Control(pDX, IDC_EDIT2, notationBox);
+	DDX_Text(pDX, IDC_EDIT2, prefixNotat);
+	DDX_Control(pDX, IDC_EDIT3, printBox);
 }
 
 BEGIN_MESSAGE_MAP(CPL2TOYPROJECTDlg, CDialogEx)
@@ -169,27 +172,51 @@ HCURSOR CPL2TOYPROJECTDlg::OnQueryDragIcon()
 /*OnBnClickedButton_ScreenClear: EditBox를 전부 초기화하는 Dlg*/
 void CPL2TOYPROJECTDlg::OnBnClickedButton_ScreenClear()
 {
-	CEdit *pEdit;
-	for (int i = 0; i < 3; i++) {	//EditBox를 초기화 하는 코드
-		pEdit = (CEdit*)GetDlgItem(IDC_EDIT1 + i);
-		pEdit->SetSel(0, -1, TRUE);
-		pEdit->Clear();
-	}
+	writeBox.SetSel(0, -1, TRUE);
+	writeBox.Clear();
+
+	notationBox.SetSel(0, -1, TRUE);
+	notationBox.Clear();
+
+	printBox.SetSel(0, -1, TRUE);
+	printBox.Clear();
+
+	infixToPrefix = 0;
 }
 
 void CPL2TOYPROJECTDlg::OnBnClickedButton_ChangeNotation()
 {
-	CString str;
-	writeBox.GetWindowText(str);
-	//notationBox.SetWindowText(str);
-	str = makePostfix(str);
+	notationBox.SetSel(0, -1, TRUE);
+	notationBox.Clear();
 
+	writeBox.GetWindowText(infixNotat);
+	if (infixNotat.GetLength() == 0) {
+		MessageBox(_T("입력한 수식이 없습니다."), _T("Error"), MB_ICONERROR);
+		return;
+	}
+	if (!infixReverse()) {
+		MessageBox(_T("입력한 수식에 문제가 있습니다."), _T("Error"), MB_ICONERROR);
+		return;
+	}
+
+	prefixNotat = makePrefixNotation();
+	infixToPrefix = 1;
+	notationBox.SetWindowText(prefixNotat);
 }
 
 
 void CPL2TOYPROJECTDlg::OnBnClickedButton_Make()
 {
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+
+	if (infixNotat.GetLength() == 0 || !infixToPrefix) {
+		MessageBox(_T("입력한 수식이 없습니다."), _T("Error"), MB_ICONERROR);
+		return;
+	}
+	if (!infixReverse()) {
+		MessageBox(_T("입력한 수식에 문제가 있습니다."), _T("Error"), MB_ICONERROR);
+		return;
+	}
 }
 
 
@@ -248,32 +275,119 @@ void CPL2TOYPROJECTDlg::OnEnChangeEdit_result()
 	// TODO:  여기에 컨트롤 알림 처리기 코드를 추가합니다.
 }
 
-CString makePostfix(CString str)
+bool CPL2TOYPROJECTDlg::infixReverse()	//infix를 뒤집어서 String에 저장하는 함수
 {
-	stack<CString> S;
-	CString token, res;
-	int pos = 0;
-	
-	while ((token = str.Tokenize(_T(" "), pos)) != _T("")){
-		if (!token.Compare((LPCWSTR)"(")) {
-			S.push(token);
-			res += token;
+	CStringA temp = CStringA(infixNotat);
+	char infixArr[10000] = { 0 };
+	memcpy(infixArr, temp.GetBuffer(), temp.GetLength());
+	char reverse[10000] = { 0 };
+	int icur = strlen(infixArr) - 1, cur = -1;
+	bool flag = 0;
+	while (icur >= 0) {
+		if (infixArr[icur] == '(') {
+			reverse[++cur] = ')';
+			icur--;
+			continue;
 		}
-		else if (!token.Compare((LPCWSTR)")")) {
-			while (!S.empty()) {
-				CString top = S.top();
-				S.pop();
-				
-				if (top.Compare((LPCWSTR)"(")) {
-					break;
+		else if (infixArr[icur] == ')') {
+			reverse[++cur] = '(';
+			icur--;
+			continue;
+		}
+		else if (reverse[cur] != ' ' && infixArr[icur] == ' ') {
+			reverse[++cur] = ' ';
+			icur--;
+			continue;
+		}
+		else if (infixArr[icur] >= '0' && infixArr[icur] <= '9') {
+			char digit[100] = { 0 };
+			//digit 넣는 코드
+			while (icur >= 0 && ((infixArr[icur] >= '0' && infixArr[icur] <= '9') || infixArr[icur] == '-')) {
+				if (infixArr[icur] == '-' && infixArr[icur - 1] == '-') {
+					return FALSE;
 				}
-				res += token;
+				reverse[++cur] = infixArr[icur];
+				icur--;
 			}
-			res += token;
 		}
-		else if (!token.Compare((LPCWSTR)"MINUS"))	S.push(token);
-		else if (!token.Compare((LPCWSTR)"IF"))	S.push(token);
-		else res += token;
+		else if ((infixArr[icur] >= 'A' && infixArr[icur] <= 'Z') || (infixArr[icur] >= 'a' && infixArr[icur] <= 'z')){
+			//alpha 넣는 코드
+			CStringA alpha;
+			while (icur >= 0 && (infixArr[icur] >= 'A' && infixArr[icur] <= 'Z') || (infixArr[icur] >= 'a' && infixArr[icur] <= 'z')) {
+				reverse[++cur] = infixArr[icur];
+				alpha += infixArr[icur];
+				icur--;
+			}
+		}
+		else
+			return FALSE;
 	}
-	return res;
+	prefixNotat = CString(reverse);
+	return TRUE;
+}
+
+CString CPL2TOYPROJECTDlg::makePrefixNotation()	//스택을 이용해서 prefix로 바꾸는 함수
+{
+	CStringA temp = CStringA(prefixNotat);	
+	
+	char reverse[10000] = { 0 };
+	memcpy(reverse, temp.GetBuffer(), temp.GetLength());
+	CStringA res;	 //결과값
+	int len = strlen(reverse), cur = 0;
+
+	stack<CStringA> S;
+	while (cur < len) {
+		if (reverse[cur] == '(') {
+			S.push("(");
+			res += " ) ", cur++;
+			continue;
+		}
+		else if (reverse[cur] == ')') {
+			while (!S.empty()) {
+				CStringA top = S.top();
+				S.pop();
+				if (!strcmp(top, "("))
+					break;
+				res += " ";
+				res += top;
+			}
+			res += " ( ", cur++;
+			continue;
+		}
+		else if (reverse[cur] == ' ') {
+			res += " ";
+			cur++;
+			continue;
+		}
+		char digit[100] = { 0 }, dcur = -1;
+		while (cur < len && ((reverse[cur] >= '0' && reverse[cur] <= '9') || (reverse[cur] == '-'))) {
+			digit[++dcur] = reverse[cur];
+			cur++;
+		}
+		if (strlen(digit) > 0)	res += digit;
+		//alpha 넣는 코드
+		char alpha[100] = { 0 };
+		int acur = -1;
+		while (cur < len && ((reverse[cur] >= 'A' && reverse[cur] <= 'Z') || reverse[cur] >= 'a' && reverse[cur] <= 'z')) {
+			alpha[++acur] = reverse[cur];
+			cur++;
+		}
+		if (strlen(alpha) > 0) {
+			S.push(alpha);
+		}
+	}	
+
+	while (!S.empty()) {
+		res += S.top();
+		res += " ";
+		S.pop();
+	}
+	return CString(res.MakeReverse());
+}
+
+bool CPL2TOYPROJECTDlg::checkSyntax()
+{
+	stack<CStringA> S;
+	
+	return 0;
 }

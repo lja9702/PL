@@ -4,6 +4,7 @@
 
 #pragma once
 #include <stack>
+#include <cstring>
 using namespace std;
 // CPL2TOYPROJECTDlg 대화 상자
 class CPL2TOYPROJECTDlg : public CDialogEx
@@ -35,6 +36,10 @@ public:
 	CEdit writeBox;
 	CEdit notationBox;
 	CEdit printBox;
+	CString prefixNotat;
+	CString infixNotat;
+
+	bool infixToPrefix = 0;
 
 	afx_msg void OnBnClickedButton_ScreenClear();
 	afx_msg void OnBnClickedButton_ChangeNotation();
@@ -47,4 +52,7 @@ public:
 	afx_msg void OnEnChangeEdit();
 	afx_msg void OnEnChangeEdit_IntermediateCode();
 	afx_msg void OnEnChangeEdit_result();
+	afx_msg bool infixReverse();
+	afx_msg CString makePrefixNotation();
+	afx_msg bool CPL2TOYPROJECTDlg::checkSyntax();
 };
