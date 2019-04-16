@@ -381,6 +381,7 @@ void CPL2TOYPROJECTDlg::OnBnClickedButton_Interpret()
 		MessageBox(_T("중간코드를 생성해주세요!!!"), _T("Error"), MB_ICONERROR);
 		return;
 	}
+	
 	int end = midCode.size() - 1;
 
 	stack<CStringA> S;
@@ -389,63 +390,56 @@ void CPL2TOYPROJECTDlg::OnBnClickedButton_Interpret()
 		if (!strcmp(str, "MINUS") || !strcmp(str, "IF"))
 			S.push(str);
 		else {
+			CString cstr;
 			CStringA oper;	//숫자만 스택에 삽입
 			for (int i = 0; i < strlen(str); i++) {
 				if (str[i] >= '0' && str[i] <= '9')
 					oper += str[i];
 			}
-			CStringA top = S.top();
-			if (strcmp(top, "MINUS") && strcmp(top, "IF")) {
-				int oper2 = atoi(oper);
-				int oper1 = atoi(top);
+			int oper2 = atoi(oper);
+			bool flag = 1;
+			while(!S.empty() && strcmp(S.top(), "MINUS") && strcmp(S.top(), "IF")) {
+				flag = 0;
+				int oper1 = atoi(S.top());
 				S.pop();
-				top = S.top();
+				CStringA op = S.top();
 				S.pop();
-				CString cstr;
-				if (!strcmp(top, "MINUS")) {
-					int res = oper1 - oper2;
-					cstr.Format(_T("%d"), res);
-					S.push(CStringA(cstr));
-				}
-				else {
-					if (oper1 <= 0) {
-						cstr.Format(_T("0"));
-						S.push(CStringA(cstr));
-					}
+				if (!strcmp(op, "MINUS")) {
+					oper2 = oper1 - oper2;
+					if (!S.empty() && strcmp(S.top(), "MINUS") && strcmp(S.top(), "IF"))	continue;
 					else {
 						cstr.Format(_T("%d"), oper2);
 						S.push(CStringA(cstr));
+						break;
+					}
+				}
+				else {
+					if (oper1 <= 0) {
+						oper2 = 0;
+						if (!S.empty() && strcmp(S.top(), "MINUS") && strcmp(S.top(), "IF"))	continue;
+						else {
+							cstr.Format(_T("0"));
+							S.push(CStringA(cstr));
+							break;
+						}
+					}
+					else {
+						if (!S.empty() && strcmp(S.top(), "MINUS") && strcmp(S.top(), "IF"))	continue;
+						else {
+							cstr.Format(_T("%d"), oper2);
+							S.push(CStringA(cstr));
+							break;
+						}
 					}
 				}
 			}
-			else S.push(oper);
-		}
-	}
-	if (S.size() > 1 && !S.empty()) {
-		int oper2 = atoi(S.top());
-		S.pop();
-		int oper1 = atoi(S.top());
-		S.pop();
-		CStringA op = S.top();
-		S.pop();
-		CString cstr;
-		if (!strcmp(op, "MINUS")) {
-			int res = oper1 - oper2;
-			cstr.Format(_T("%d"), res);
-			S.push(CStringA(cstr));
-		}
-		else {
-			if (oper1 <= 0) {
-				cstr.Format(_T("0"));
-				S.push(CStringA(cstr));
-			}
-			else {
+			if(flag){
 				cstr.Format(_T("%d"), oper2);
 				S.push(CStringA(cstr));
 			}
 		}
 	}
-
+	
 	printBox.SetWindowText(CString(S.top()) + _T("\r\n"));
 }
 
@@ -477,16 +471,6 @@ void CPL2TOYPROJECTDlg::reset() {	//초기화하는 함수
 	
 	prefixNotat = _T("");
 	infixNotat = _T("");
-}
-
-bool CPL2TOYPROJECTDlg::analyze() {
-	if (!lexical_analyzer())
-		return 0;
-	if (!syntax_analyzer(0, toklen - 1))
-		return 0;
-
-	makePrefixNotation();
-	return 1;
 }
 
 bool CPL2TOYPROJECTDlg::lexical_analyzer() {	//어휘분석기

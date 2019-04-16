@@ -65,7 +65,6 @@ public:
 	afx_msg void reset();
 	afx_msg int syntax_analyzer(int st, int end);
 	afx_msg bool lexical_analyzer();
-	afx_msg bool analyze();
 	
 	typedef struct _match {
 		CStringA lexeme;
