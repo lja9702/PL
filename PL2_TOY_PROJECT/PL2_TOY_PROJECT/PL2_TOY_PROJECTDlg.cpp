@@ -71,9 +71,7 @@ BEGIN_MESSAGE_MAP(CPL2TOYPROJECTDlg, CDialogEx)
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
 	ON_BN_CLICKED(IDC_BUTTON1, &CPL2TOYPROJECTDlg::OnBnClickedButton_ScreenClear)
-	ON_EN_CHANGE(IDC_EDIT1, &CPL2TOYPROJECTDlg::OnEnChangeEdit)
-	ON_EN_CHANGE(IDC_EDIT2, &CPL2TOYPROJECTDlg::OnEnChangeEdit_IntermediateCode)
-	ON_EN_CHANGE(IDC_EDIT3, &CPL2TOYPROJECTDlg::OnEnChangeEdit_result)
+
 	ON_BN_CLICKED(IDC_BUTTON2, &CPL2TOYPROJECTDlg::OnBnClickedButton_ChangeNotation)
 	ON_BN_CLICKED(IDC_BUTTON3, &CPL2TOYPROJECTDlg::OnBnClickedButton_Make)
 	ON_BN_CLICKED(IDC_BUTTON4, &CPL2TOYPROJECTDlg::OnBnClickedButton_Save)
@@ -175,290 +173,438 @@ void CPL2TOYPROJECTDlg::OnBnClickedButton_ScreenClear()
 	writeBox.SetSel(0, -1, TRUE);
 	writeBox.Clear();
 
-	notationBox.SetSel(0, -1, TRUE);
-	notationBox.Clear();
-
-	printBox.SetSel(0, -1, TRUE);
-	printBox.Clear();
-
-	infixToPrefix = 0;	//infix를 prefix로 바꿨던 여부를 다시 0으로 초기화
+	reset();
 }
 
 void CPL2TOYPROJECTDlg::OnBnClickedButton_ChangeNotation()
 {
-	notationBox.SetSel(0, -1, TRUE);
-	notationBox.Clear();
+	prefixtok.clear();
+	infixtok.clear();
+
+	prefixNotat = _T("");
+	infixNotat = _T("");
 
 	writeBox.GetWindowText(infixNotat);
-	CStringA inf = CStringA(infixNotat);
+	rightSyntax = lexical_analyzer();	//어휘를 분석하고 문제가 어휘가 있는 식인지 판단하는 함수
 
-	int st = 0, end = inf.GetLength() - 1;
-	while (st < end) {
-		if (inf[st] != ' ' && inf[end] != ' ') break;
-		if (inf[st] == ' ') st++;
-		if (inf[end] == ' ')	end--;
+	if(!rightSyntax){
+		MessageBox(_T("입력한 수식에 문제가 있습니다."), _T("Error"), MB_ICONERROR);
+		return;
 	}
-	if (st >= end) {
+
+	toklen = infixtok.size();
+	if (toklen == 0) {
 		MessageBox(_T("입력한 수식이 없습니다."), _T("Error"), MB_ICONERROR);
 		return;
 	}
-	rightSyntax = checkSyntax(st, end, inf);
-	if(rightSyntax < 0) {
+	
+	rightSyntax = syntax_analyzer(0, toklen - 1);	//구문을 분석하여 문법에 맞는 수식인지 판단
+
+	if(rightSyntax > 1) {		//정의되어있지 않은 연산자
 		MessageBox(_T("Undefined"), _T("Error"), MB_ICONERROR);
 		return;
 	}
-	else if (rightSyntax > 0) {
+	else if (!rightSyntax) {		
 		MessageBox(_T("입력한 수식에 문제가 있습니다."), _T("Error"), MB_ICONERROR);
 		return;
 	}
 
-	if (!infixReverse()) {
-		MessageBox(_T("입력한 수식에 문제가 있습니다."), _T("Error"), MB_ICONERROR);
-		return;
-	}
-	prefixNotat = makePrefixNotation();
-	infixToPrefix = 1;
+	makePrefixNotation();			//전위연산으로 바꾸어주는 함수
+	infixToPrefix = 1;				//전위연산으로 바꾸기 성공
+
 	notationBox.SetWindowText(prefixNotat);
+
+	return;
 }
 
 
 void CPL2TOYPROJECTDlg::OnBnClickedButton_Make()
 {
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	reset();
+	writeBox.GetWindowText(infixNotat);
+	rightSyntax = lexical_analyzer();	//어휘를 분석하고 문제가 어휘가 있는 식인지 판단하는 함수
 
-	if (infixNotat.GetLength() == 0 || !infixToPrefix) {
-		MessageBox(_T("입력한 수식이 없습니다."), _T("Error"), MB_ICONERROR);
-		return;
-	}
-	if (!infixReverse()) {
+	if (!rightSyntax) {
 		MessageBox(_T("입력한 수식에 문제가 있습니다."), _T("Error"), MB_ICONERROR);
 		return;
 	}
+
+	toklen = infixtok.size();
+	if (toklen == 0) {
+		MessageBox(_T("입력한 수식이 없습니다."), _T("Error"), MB_ICONERROR);
+		return;
+	}
+
+	rightSyntax = syntax_analyzer(0, toklen - 1);	//구문을 분석하여 문법에 맞는 수식인지 판단
+
+	if (rightSyntax > 1) {		//정의되어있지 않은 연산자
+		MessageBox(_T("Undefined"), _T("Error"), MB_ICONERROR);
+		return;
+	}
+	else if (!rightSyntax) {
+		MessageBox(_T("입력한 수식에 문제가 있습니다."), _T("Error"), MB_ICONERROR);
+		return;
+	}
+
+	toklen = infixtok.size();
+	makePrefixNotation();			//전위연산으로 바꾸어주는 함수
+	infixToPrefix = 1;				//전위연산으로 바꾸기 성공
+
+	CString midCodeString;
+
+	midCode.push_back(_T("begin"));
+	if (prefixtok.size() == 1) {
+		midCode.push_back(CString(prefixtok[0].lexeme));
+		midCode.push_back(_T("end"));
+	}
+	else {
+		for (int i = toklen - 1; i >= 0; i--) {
+			if (prefixtok[i].token == LEFT_PAREN || prefixtok[i].token == RIGHT_PAREN)
+				continue;
+			else if (prefixtok[i].token == OPER)
+				midCode.push_back(CString(prefixtok[i].lexeme));
+			else
+				midCode.push_back(_T("push " + CString(prefixtok[i].lexeme)));
+		}
+		midCode.push_back(_T("end"));
+	}
+
+	for (int i = 0; i < midCode.size(); i++) {
+		midCodeString += CString(midCode[i] + _T("\r\n"));
+	}
+	notationBox.SetWindowText(midCodeString);
 }
 
 
 void CPL2TOYPROJECTDlg::OnBnClickedButton_Save()
 {
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CString tmpinput;
+	char input[10000] = { 0 };
+
+	//edit control 변수
+	CEdit *textBox;
+	textBox = (CEdit*)GetDlgItem(IDC_EDIT2);
+
+	textBox->GetWindowTextW(tmpinput);
+
+	for (int i = 0; i < tmpinput.GetLength(); i++) {
+		input[i] = tmpinput.GetAt(i);
+	}
+
+	CFileDialog dlgFile(FALSE, _T("txt"), _T("inter*.txt"), OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT, NULL);
+	dlgFile.m_ofn.lpstrFilter = _T("Text File(*.txt)");
+
+	if (IDOK == dlgFile.DoModal()) {
+		CString strPathName = dlgFile.GetPathName();
+		CFile file;
+		file.Open(strPathName, CFile::modeWrite | CFile::modeCreate);
+		file.Write(input, strlen(input));
+
+		file.Close();
+	}
 }
 
 
 void CPL2TOYPROJECTDlg::OnBnClickedButton_Loading()
 {
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	ULONGLONG length;
+	char buf[10000] = { 0 };
+	//파일 불러오기 대화상자
+	CFileDialog dlgaFile(TRUE, _T("txt"), _T("inter*.txt"), OFN_HIDEREADONLY | OFN_FILEMUSTEXIST, NULL);
+	dlgaFile.m_ofn.lpstrFilter = _T("Text File(*.txt)");
+
+
+	//파일내용 읽어오기
+	if (IDOK == dlgaFile.DoModal()) {
+
+		CString strPathName = dlgaFile.GetPathName();
+		CFile file;
+		file.Open(strPathName, CFile::modeRead);
+		length = file.GetLength();
+		file.Read(buf, length * sizeof(char));
+		file.Close();
+
+		writeBox.SetSel(0, -1, TRUE);
+		writeBox.Clear();
+		reset();
+
+		//edit control 변수 
+		CEdit *textBox;
+		textBox = (CEdit*)GetDlgItem(IDC_EDIT2);
+		//파일 내용 쓰기
+		textBox->SetWindowTextW(CA2W(buf));
+
+	}
+	else return;
+
+	midCode.clear();
+
+	int buflen = strlen(buf), cur = 0;
+
+	while (cur < buflen) {
+		if (buf[cur] == 'b') {
+			midCode.push_back(_T("begin"));
+			cur += 5;
+			continue;
+		}
+		else if (buf[cur] == 'M') {
+			midCode.push_back(_T("MINUS"));
+			cur += 5;
+			continue;
+		}
+		else if(buf[cur] == 'I')
+			midCode.push_back(_T("IF"));
+		else if (buf[cur] == 'p') {
+			CString str;
+			while (cur < buflen && buf[cur] != '\r') {
+				str += buf[cur];
+				cur++;
+			}
+			midCode.push_back(str);
+		}
+		else if (buf[cur] == 'e')
+			midCode.push_back(_T("end"));
+
+		cur++;
+	}
 }
 
 
 void CPL2TOYPROJECTDlg::OnBnClickedButton_Interpret()
 {
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+
+	if (midCode.empty()) {
+		MessageBox(_T("중간코드를 생성해주세요!!!"), _T("Error"), MB_ICONERROR);
+		return;
+	}
+	int end = midCode.size() - 1;
+
+	stack<CStringA> S;
+	for (int i = 1; i < end; i++) {
+		CStringA str = CStringA(midCode[i]);
+		if (!strcmp(str, "MINUS") || !strcmp(str, "IF"))
+			S.push(str);
+		else {
+			CStringA oper;	//숫자만 스택에 삽입
+			for (int i = 0; i < strlen(str); i++) {
+				if (str[i] >= '0' && str[i] <= '9')
+					oper += str[i];
+			}
+			CStringA top = S.top();
+			if (strcmp(top, "MINUS") && strcmp(top, "IF")) {
+				int oper2 = atoi(oper);
+				int oper1 = atoi(top);
+				S.pop();
+				top = S.top();
+				S.pop();
+				CString cstr;
+				if (!strcmp(top, "MINUS")) {
+					int res = oper1 - oper2;
+					cstr.Format(_T("%d"), res);
+					S.push(CStringA(cstr));
+				}
+				else {
+					if (oper1 <= 0) {
+						cstr.Format(_T("0"));
+						S.push(CStringA(cstr));
+					}
+					else {
+						cstr.Format(_T("%d"), oper2);
+						S.push(CStringA(cstr));
+					}
+				}
+			}
+			else S.push(oper);
+		}
+	}
+	if (S.size() > 1 && !S.empty()) {
+		int oper2 = atoi(S.top());
+		S.pop();
+		int oper1 = atoi(S.top());
+		S.pop();
+		CStringA op = S.top();
+		S.pop();
+		CString cstr;
+		if (!strcmp(op, "MINUS")) {
+			int res = oper1 - oper2;
+			cstr.Format(_T("%d"), res);
+			S.push(CStringA(cstr));
+		}
+		else {
+			if (oper1 <= 0) {
+				cstr.Format(_T("0"));
+				S.push(CStringA(cstr));
+			}
+			else {
+				cstr.Format(_T("%d"), oper2);
+				S.push(CStringA(cstr));
+			}
+		}
+	}
+
+	printBox.SetWindowText(CString(S.top()) + _T("\r\n"));
 }
 
 
 void CPL2TOYPROJECTDlg::OnBnClickedButton_Exit()
 {
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
-}
-
-void CPL2TOYPROJECTDlg::OnEnChangeEdit()
-{
-	// TODO:  RICHEDIT 컨트롤인 경우, 이 컨트롤은
-	// CDialogEx::OnInitDialog() 함수를 재지정 
-	//하고 마스크에 OR 연산하여 설정된 ENM_CHANGE 플래그를 지정하여 CRichEditCtrl().SetEventMask()를 호출하지 않으면
-	// 이 알림 메시지를 보내지 않습니다.
-
-	// TODO:  여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	int conclusion = MessageBox(L"종료 하시겠습니까?", L"종료", MB_OKCANCEL);
+	if (conclusion == IDOK)
+		exit(0);
 }
 
 
-void CPL2TOYPROJECTDlg::OnEnChangeEdit_IntermediateCode()
-{
-	// TODO:  RICHEDIT 컨트롤인 경우, 이 컨트롤은
-	// CDialogEx::OnInitDialog() 함수를 재지정 
-	//하고 마스크에 OR 연산하여 설정된 ENM_CHANGE 플래그를 지정하여 CRichEditCtrl().SetEventMask()를 호출하지 않으면
-	// 이 알림 메시지를 보내지 않습니다.
+void CPL2TOYPROJECTDlg::reset() {	//초기화하는 함수
 
-	// TODO:  여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	notationBox.SetSel(0, -1, TRUE);
+	notationBox.Clear();
+
+	printBox.SetSel(0, -1, TRUE);
+	printBox.Clear();
+	midCode.clear();
+
+	infixToPrefix = 0;	//infix를 prefix로 바꿨던 여부를 다시 0으로 초기화
+	toklen = 0;
+	rightSyntax = 0;
+	operres = 0;
+	prefixtok.clear();
+	infixtok.clear();
+	
+	prefixNotat = _T("");
+	infixNotat = _T("");
 }
 
+bool CPL2TOYPROJECTDlg::analyze() {
+	if (!lexical_analyzer())
+		return 0;
+	if (!syntax_analyzer(0, toklen - 1))
+		return 0;
 
-void CPL2TOYPROJECTDlg::OnEnChangeEdit_result()
-{
-	// TODO:  RICHEDIT 컨트롤인 경우, 이 컨트롤은
-	// CDialogEx::OnInitDialog() 함수를 재지정 
-	//하고 마스크에 OR 연산하여 설정된 ENM_CHANGE 플래그를 지정하여 CRichEditCtrl().SetEventMask()를 호출하지 않으면
-	// 이 알림 메시지를 보내지 않습니다.
-
-	// TODO:  여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	makePrefixNotation();
+	return 1;
 }
 
-bool CPL2TOYPROJECTDlg::infixReverse()	//infix를 뒤집어서 String에 저장하는 함수
-{
-	CStringA temp = CStringA(infixNotat);
-	char infixArr[10000] = { 0 };
-	memcpy(infixArr, temp.GetBuffer(), temp.GetLength());
-	char reverse[10000] = { 0 };
-	int icur = strlen(infixArr) - 1, cur = -1;
-	bool flag = 0;
-	while (icur >= 0) {
-		if (infixArr[icur] == '(') {
-			reverse[++cur] = ')';
-			icur--;
-			continue;
+bool CPL2TOYPROJECTDlg::lexical_analyzer() {	//어휘분석기
+	
+	CStringA arr = CStringA(infixNotat);
+	int cur = 0, len = strlen(arr);
+	Match m;
+	while (cur < len) {
+		if (arr[cur] == ' ')	cur++;
+		else if (arr[cur] == '(') {
+			m.lexeme = "(";	m.token = LEFT_PAREN;
+			infixtok.push_back(m);
+			cur++;
 		}
-		else if (infixArr[icur] == ')') {
-			reverse[++cur] = '(';
-			icur--;
-			continue;
+		else if (arr[cur] == ')') {
+			m.lexeme = ")";	m.token = RIGHT_PAREN;
+			infixtok.push_back(m);
+			cur++;
 		}
-		else if (reverse[cur] != ' ' && infixArr[icur] == ' ') {
-			reverse[++cur] = ' ';
-			icur--;
-			continue;
-		}
-		else if (infixArr[icur] >= '0' && infixArr[icur] <= '9') {
-			char digit[100] = { 0 };
-			//digit 넣는 코드
-			while (icur >= 0 && ((infixArr[icur] >= '0' && infixArr[icur] <= '9') || infixArr[icur] == '-')) {
-				if (infixArr[icur] == '-' && infixArr[icur - 1] == '-') {
-					return FALSE;
-				}
-				reverse[++cur] = infixArr[icur];
-				icur--;
+		else if (arr[cur] >= 'A' && arr[cur] <= 'Z') {
+			CStringA st;
+			while (cur < len && arr[cur] != ' ' && arr[cur] >= 'A' && arr[cur] <= 'Z') {
+				st += arr[cur];
+				cur++;
 			}
+			m.lexeme = st;
+			if (!strcmp(st, "MINUS") || !strcmp(st, "IF"))
+				m.token = OPER;
+
+			else	m.token = UNKNOWN;
+
+			infixtok.push_back(m);
 		}
-		else if ((infixArr[icur] >= 'A' && infixArr[icur] <= 'Z') || (infixArr[icur] >= 'a' && infixArr[icur] <= 'z')){
-			//alpha 넣는 코드
-			CStringA alpha;
-			while (icur >= 0 && (infixArr[icur] >= 'A' && infixArr[icur] <= 'Z') || (infixArr[icur] >= 'a' && infixArr[icur] <= 'z')) {
-				reverse[++cur] = infixArr[icur];
-				alpha += infixArr[icur];
-				icur--;
+		else if ((arr[cur] >= '0' && arr[cur] <= '9') || arr[cur] == '-') {
+			CStringA st;
+			if (arr[cur] == '-' && arr[cur + 1] == '-')
+				return FALSE;
+			
+			while (cur < len && ((arr[cur] >= '0' && arr[cur] <= '9') || arr[cur] == '-')) {
+				st += arr[cur];
+				cur++;
 			}
+			m.lexeme = st, m.token = CONST;
+			infixtok.push_back(m);
 		}
-		else
-			return FALSE;
+		else if (arr[cur] >= 'a' && arr[cur] <= 'z') {
+			CStringA st;
+			while (cur < len && arr[cur] != ' ') {
+				st += arr[cur];
+				cur++;
+			}
+			m.lexeme = st, m.token = VAR;
+			infixtok.push_back(m);
+		}
+		else return FALSE;
 	}
-	prefixNotat = CString(reverse);
 	return TRUE;
 }
 
-CString CPL2TOYPROJECTDlg::makePrefixNotation()	//스택을 이용해서 prefix로 바꾸는 함수
+int CPL2TOYPROJECTDlg::syntax_analyzer(int st, int end)	//구문분석기   return 1 : 정상적 return 0: 비정상적 return 2: undefined
 {
-	CStringA temp = CStringA(prefixNotat);	
-	
-	char reverse[10000] = { 0 };
-	memcpy(reverse, temp.GetBuffer(), temp.GetLength());
-	CStringA res;	 //결과값
-	int len = strlen(reverse), cur = 0;
-
-	stack<CStringA> S;
-	while (cur < len) {
-		if (reverse[cur] == '(') {
-			S.push("(");
-			res += " ) ", cur++;
-			continue;
-		}
-		else if (reverse[cur] == ')') {
-			while (!S.empty()) {
-				CStringA top = S.top();
-				S.pop();
-				if (!strcmp(top, "("))
-					break;
-				res += " ";
-				res += top;
+	if (st > end)	return 0;
+	else if (st == end && (infixtok[st].token == CONST || infixtok[st].token == VAR)) {
+			return 1;
+	}
+	else if (infixtok[st].token == LEFT_PAREN && infixtok[end].token == RIGHT_PAREN) {
+		for (int i = st; i < end; i++) {
+			if (infixtok[i].token == OPER || infixtok[i].token == UNKNOWN) {
+				int left = syntax_analyzer(st + 1, i - 1);
+				int right = syntax_analyzer(i + 1, end - 1);
+				if (left == 1 && right == 1) {
+					if (infixtok[i].token == UNKNOWN)	return 2;
+					return 1;
+				}
 			}
-			res += " ( ", cur++;
-			continue;
 		}
-		else if (reverse[cur] == ' ') {
-			res += " ";
-			cur++;
-			continue;
+	}
+	return 0;
+}
+
+void CPL2TOYPROJECTDlg::makePrefixNotation()	//스택을 이용해서 prefix로 바꾸는 함수
+{
+	CStringA res;	 //결과값
+	int cur = toklen - 1;
+
+	Match m;
+	stack<Match> S;
+	while (cur >= 0) {
+		if (infixtok[cur].token == RIGHT_PAREN) {
+			S.push(infixtok[cur]);
+			prefixtok.push_back(infixtok[cur]);
 		}
-		char digit[100] = { 0 }, dcur = -1;
-		while (cur < len && ((reverse[cur] >= '0' && reverse[cur] <= '9') || (reverse[cur] == '-'))) {
-			digit[++dcur] = reverse[cur];
-			cur++;
+		else if (infixtok[cur].token == LEFT_PAREN) {
+			while (!S.empty()) {
+				Match top = S.top();
+				S.pop();
+				if (top.token == RIGHT_PAREN)
+					break;
+				prefixtok.push_back(top);
+			}
+			prefixtok.push_back(infixtok[cur]);
 		}
-		if (strlen(digit) > 0)	res += digit;
-		//alpha 넣는 코드
-		char alpha[100] = { 0 };
-		int acur = -1;
-		while (cur < len && ((reverse[cur] >= 'A' && reverse[cur] <= 'Z') || reverse[cur] >= 'a' && reverse[cur] <= 'z')) {
-			alpha[++acur] = reverse[cur];
-			cur++;
-		}
-		if (strlen(alpha) > 0) {
-			S.push(alpha);
-		}
+		else if (infixtok[cur].token == OPER) 
+			S.push(infixtok[cur]);
+
+		else if (infixtok[cur].token == CONST || infixtok[cur].token == VAR)
+			prefixtok.push_back(infixtok[cur]);
+
+		cur--;
 	}	
 
 	while (!S.empty()) {
-		res += S.top();
-		res += " ";
+		prefixtok.push_back(S.top());
 		S.pop();
 	}
-	return CString(res.MakeReverse());
-}
 
-int CPL2TOYPROJECTDlg::checkSyntax(int st, int end, CStringA str)
-{
-	if (str[st] == '(' && str[end] == ')') {	//( <term> MINUS <term> )이거나 ( <term> IF <term> ) 찾기
-		int cur = st + 1;
-		while (cur < end) {
-			if (str[cur] >= 'A' && str[cur] <= 'Z') {
-				CStringA oper;
-				int operst = cur;
-				while (cur < end && str[cur] >= 'A' && str[cur] <= 'Z') {
-					oper += str[cur];
-					cur++;
-				}
-				int operfin = cur - 1;
-
-				if (!strcmp(oper, "MINUS") || !strcmp(oper, "IF")) {
-					int x1 = st + 1, x2 = operst - 1, y1 = operfin + 1, y2 = end - 1;
-					while (x1 < x2) {
-						if (str[x1] != ' ' && str[x2] != ' ')	break;
-						if (str[x1] == ' ')	x1++;
-						if (str[x2] == ' ') x2--;
-					}
-					if (x1 > x2)	return SYNERROR;
-					while (y1 < y2) {
-						if (str[y1] != ' ' && str[y2] != ' ')	break;
-						if (str[y1] == ' ')	y1++;
-						if (str[y2] == ' ') y2--;
-					}
-					if (y1 > y2)	return SYNERROR;
-					return checkSyntax(x1, x2, str) + checkSyntax(y1, y2, str);
-				}
-				else 
-					return UNDIF;
-			}
-			cur++;
-		}
-		return SYNERROR;
+	for (int i = toklen - 1; i >= 0; i--) {
+		prefixNotat += CString(prefixtok[i].lexeme);
+		prefixNotat += " ";
 	}
-	else if ((str[st] >= '0' && str[st] <= '9') || str[st] == '-') {
-		if (str[st] == '-' && str[st + 1] == '-')	return SYNERROR;
-		int cur = st;
-		while (cur <= end && ((str[cur] >= '0' && str[cur] <= '9') || str[cur] == '-'))
-			cur++;
-
-		while (cur <= end && str[cur] == ' ')	cur++;
-		if (cur <= end)	return SYNERROR;
-		
-		return 0;
-	}
-	else if (str[st] >= 'a' && str[st] <= 'z') {
-		int cur = st;
-		while (cur <= end && str[cur] >= 'a' && str[cur] <= 'z')
-			cur++;
-
-		while (cur <= end && str[cur] == ' ')	cur++;
-		if (cur < end)	return SYNERROR;
-		
-		return 0;
-	}
-	return SYNERROR;
 }
